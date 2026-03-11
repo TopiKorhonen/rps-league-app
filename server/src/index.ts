@@ -1,8 +1,9 @@
-import express from "express";
-import cors from "cors";
 import dotenv from "dotenv";
 dotenv.config();
-import { rpsApi } from "./services/rpsApi";
+
+import express from "express";
+import cors from "cors";
+import { fetchHistoryPage } from "./services/historyService";
 
 const app = express();
 
@@ -15,8 +16,8 @@ app.get("/api/health", (_req, res) => {
 
 app.get("/api/test-history", async (_req, res) => {
   try {
-    const response = await rpsApi.get("/history");
-    res.json(response.data);
+    const result = await fetchHistoryPage();
+    res.json(result);
   } catch (error: any) {
     console.error(error.response?.data || error.message);
 
@@ -25,6 +26,18 @@ app.get("/api/test-history", async (_req, res) => {
       status: error.response?.status,
       data: error.response?.data,
       error: error.message,
+    });
+  }
+});
+
+app.get("/api/results/latest", async (_req, res) => {
+  try {
+    const result = await fetchHistoryPage("/history");
+    res.json(result.matches);
+  } catch (error: any) {
+    res.status(500).json({
+      message: "Failed to fetch latest results",
+      error: error.response?.data || error.message,
     });
   }
 });

@@ -53,7 +53,7 @@ export async function fetchHistoryPages(maxPages = 5): Promise<Match[]> {
 
 export async function fetchMatchesForDate(
   targetDate: string,
-  maxPages = 2000
+  maxPages = 100
 ): Promise<Match[]> {
   let path: string | null = "/history";
   let pageCount = 0;

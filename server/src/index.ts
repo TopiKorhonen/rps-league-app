@@ -10,6 +10,7 @@ import {
   fetchMatchesForDateRange,
 } from "./services/historyService";
 import { buildLeaderboard } from "./utils/buildLeaderboard";
+import { sortMatchesNewestFirst } from "./utils/sortMatchesNewestFirst";
 
 const app = express();
 
@@ -41,7 +42,7 @@ app.get("/api/test-history", async (_req, res) => {
 app.get("/api/results/latest", async (_req, res) => {
   try {
     const result = await fetchHistoryPage("/history");
-    res.json(result.matches);
+    res.json(sortMatchesNewestFirst(result.matches));
   } catch (error: any) {
     res.status(500).json({
       message: "Failed to fetch latest results",
@@ -67,7 +68,7 @@ app.get("/api/results/by-day", async (req, res) => {
     }
 
     const matches = await fetchMatchesForDate(date);
-    res.json(matches);
+    res.json(sortMatchesNewestFirst(matches));
   } catch (error: any) {
     res.status(500).json({
       message: "Failed to fetch results by day",
@@ -87,7 +88,7 @@ app.get("/api/results/by-player", async (req, res) => {
     }
 
     const matches = await fetchMatchesForPlayer(player);
-    res.json(matches);
+    res.json(sortMatchesNewestFirst(matches));
   } catch (error: any) {
     res.status(500).json({
       message: "Failed to fetch results by player",

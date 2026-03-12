@@ -4,28 +4,48 @@ import { mapHistoryItemToMatch } from "../utils/mapHistoryItemToMatch";
 import { getMatchDate } from "../utils/getMatchDate";
 import { isValidMatchDate } from "../utils/isValidMatchDate";
 
+const dateQueryCache = new Map<string, Match[]>();
+
+let lastLegacyApiRequestAt = 0;
+
+async function waitForLegacyApiSlot(minIntervalMs = 350): Promise<void> {
+  const now = Date.now();
+  const waitMs = Math.max(0, lastLegacyApiRequestAt + minIntervalMs - now);
+
+  if (waitMs > 0) {
+    await sleep(waitMs);
+  }
+
+  lastLegacyApiRequestAt = Date.now();
+}
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+interface HistoryResponse {
+  data: RawHistoryItem[];
+  cursor?: string | null;
+}
+
 async function fetchHistoryPageWithRetry(
   path: string,
-  maxRetries = 3
+  maxRetries = 5
 ): Promise<{ matches: Match[]; next: string | null }> {
   let attempt = 0;
 
   while (true) {
     try {
+      await waitForLegacyApiSlot(350);
       return await fetchHistoryPage(path);
     } catch (error: any) {
       const status = error?.response?.status;
 
       if (status === 429 && attempt < maxRetries) {
-        const delayMs = 500 * Math.pow(2, attempt);
+        const delayMs = 1500 * Math.pow(2, attempt);
 
         console.warn(
-          `Rate limited on ${path}. Retry ${attempt + 1} in ${delayMs}ms`
+          `429 from legacy API for ${path}. Retry ${attempt + 1} in ${delayMs}ms`
         );
 
         await sleep(delayMs);
@@ -36,12 +56,6 @@ async function fetchHistoryPageWithRetry(
       throw error;
     }
   }
-}
-
-
-interface HistoryResponse {
-  data: RawHistoryItem[];
-  cursor?: string | null;
 }
 
 export async function fetchHistoryPage(path = "/history"): Promise<{
@@ -65,16 +79,23 @@ export async function fetchHistoryPage(path = "/history"): Promise<{
 
 export async function fetchMatchesForDate(
   targetDate: string,
-  maxPages = 2000
+  maxPages = 2000,
+  startPath = "/history"
 ): Promise<Match[]> {
-  let path: string | null = "/history";
+  const cacheKey = `${targetDate}|${startPath}`;
+
+  const cached = dateQueryCache.get(cacheKey);
+  if (cached) {
+    return cached;
+  }
+
+  let path: string | null = startPath;
   let pageCount = 0;
   const collected: Match[] = [];
 
   while (path && pageCount < maxPages) {
     pageCount++;
 
-    await sleep(100);
     const { matches, next } = await fetchHistoryPageWithRetry(path);
 
     if (matches.length === 0) {
@@ -100,7 +121,10 @@ export async function fetchMatchesForDate(
     path = next;
   }
 
-  return collected.sort((a, b) => b.playedAtMs - a.playedAtMs);
+  const result = collected.sort((a, b) => b.playedAtMs - a.playedAtMs);
+  dateQueryCache.set(cacheKey, result);
+
+  return result;
 }
 
 export async function fetchMatchesForPlayer(
@@ -115,7 +139,6 @@ export async function fetchMatchesForPlayer(
   while (path && pageCount < maxPages) {
     pageCount++;
 
-    await sleep(100);
     const { matches, next } = await fetchHistoryPageWithRetry(path);
 
     if (matches.length === 0) {
@@ -140,16 +163,16 @@ export async function fetchMatchesForPlayer(
 export async function fetchMatchesForDateRange(
   startDate: string,
   endDate: string,
-  maxPages = 2000
+  maxPages = 2000,
+  startPath = "/history"
 ): Promise<Match[]> {
-  let path: string | null = "/history";
+  let path: string | null = startPath;
   let pageCount = 0;
   const collected: Match[] = [];
 
   while (path && pageCount < maxPages) {
     pageCount++;
 
-    await sleep(100);
     const { matches, next } = await fetchHistoryPageWithRetry(path);
 
     if (matches.length === 0) {
@@ -267,7 +290,6 @@ export async function fetchMatchesForDateDebug(
     pageCount++;
 
     const pageStartedAt = Date.now();
-    await sleep(100);
     const { matches, next } = await fetchHistoryPageWithRetry(path);
     const elapsedMs = Date.now() - pageStartedAt;
 
@@ -349,19 +371,16 @@ export interface HistoryDepthMeta {
     | "MAX_PAGES_REACHED"
     | "MAX_DURATION_REACHED"
     | "REPEATED_CURSOR"
-    | "UNKNOWN"
-    | "RATE_LIMITED";
+    | "UNKNOWN";
   totalElapsedMs: number;
 }
 
 export async function inspectHistoryDepth(options?: {
   maxPages?: number;
   maxDurationMs?: number;
-  delayMs?: number;
 }): Promise<HistoryDepthMeta> {
   const maxPages = options?.maxPages ?? 5000;
   const maxDurationMs = options?.maxDurationMs ?? 120000;
-  const delayMs = options?.delayMs ?? 100;
 
   let path: string | null = "/history";
   let pageCount = 0;
@@ -400,7 +419,6 @@ export async function inspectHistoryDepth(options?: {
     seenPaths.add(path);
     pageCount++;
 
-    await sleep(100);
     const { matches, next } = await fetchHistoryPageWithRetry(path);
 
     if (matches.length === 0) {
@@ -432,10 +450,6 @@ export async function inspectHistoryDepth(options?: {
     }
 
     path = next;
-
-    if (delayMs > 0) {
-      await sleep(delayMs);
-    }
   }
 
   return {

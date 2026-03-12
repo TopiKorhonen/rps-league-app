@@ -12,6 +12,7 @@ import {
   inspectHistoryDepth,
 } from "./services/historyService";
 import { buildLeaderboard } from "./utils/buildLeaderboard";
+import { getStartPathForDate } from "./utils/getStartPathForDate";
 
 const app = express();
 
@@ -80,7 +81,9 @@ app.get("/api/results/by-day", async (req, res) => {
       });
     }
 
-    const matches = await fetchMatchesForDate(date);
+    const startPath = getStartPathForDate(date);
+    const matches = await fetchMatchesForDate(date, 2000, startPath);
+
     res.json(matches);
   } catch (error: unknown) {
     if (error instanceof Error) {
@@ -127,7 +130,8 @@ app.get("/api/results/by-player", async (req, res) => {
 app.get("/api/leaderboard/today", async (_req, res) => {
   try {
     const today = new Date().toISOString().slice(0, 10);
-    const matches = await fetchMatchesForDate(today);
+    const startPath = getStartPathForDate(today);
+    const matches = await fetchMatchesForDate(today, 2000, startPath);
     const leaderboard = buildLeaderboard(matches);
 
     res.json(leaderboard);
@@ -169,7 +173,8 @@ app.get("/api/leaderboard/range", async (req, res) => {
       });
     }
 
-    const matches = await fetchMatchesForDateRange(start, end);
+    const startPath = getStartPathForDate(start);
+    const matches = await fetchMatchesForDateRange(start, end, 2000, startPath);
     const leaderboard = buildLeaderboard(matches);
 
     res.json(leaderboard);
@@ -241,14 +246,10 @@ app.get("/api/debug/history-oldest", async (req, res) => {
     const maxDurationMs = req.query.maxDurationMs
       ? Number(req.query.maxDurationMs)
       : undefined;
-    const delayMs = req.query.delayMs
-      ? Number(req.query.delayMs)
-      : undefined;
 
     const result = await inspectHistoryDepth({
       maxPages,
       maxDurationMs,
-      delayMs,
     });
 
     res.json(result);

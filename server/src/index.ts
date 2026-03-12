@@ -8,9 +8,10 @@ import {
   fetchMatchesForDate,
   fetchMatchesForPlayer,
   fetchMatchesForDateRange,
+  fetchMatchesForDateDebug,
+  inspectHistoryDepth,
 } from "./services/historyService";
 import { buildLeaderboard } from "./utils/buildLeaderboard";
-import { sortMatchesNewestFirst } from "./utils/sortMatchesNewestFirst";
 
 const app = express();
 
@@ -29,25 +30,37 @@ app.get("/api/test-history", async (_req, res) => {
   try {
     const result = await fetchHistoryPage();
     res.json(result);
-  } catch (error: any) {
-    res.status(500).json({
-      message: "Failed to fetch history",
-      status: error.response?.status,
-      data: error.response?.data,
-      error: error.message,
-    });
+  } catch (error: unknown) {
+    if (error instanceof Error) {
+      res.status(500).json({
+        message: "Failed to fetch history",
+        error: error.message,
+      });
+    } else {
+      res.status(500).json({
+        message: "Failed to fetch history",
+        error: "Unknown error",
+      });
+    }
   }
 });
 
 app.get("/api/results/latest", async (_req, res) => {
   try {
     const result = await fetchHistoryPage("/history");
-    res.json(sortMatchesNewestFirst(result.matches));
-  } catch (error: any) {
-    res.status(500).json({
-      message: "Failed to fetch latest results",
-      error: error.response?.data || error.message,
-    });
+    res.json(result.matches.sort((a, b) => b.playedAtMs - a.playedAtMs));
+  } catch (error: unknown) {
+    if (error instanceof Error) {
+      res.status(500).json({
+        message: "Failed to fetch latest results",
+        error: error.message,
+      });
+    } else {
+      res.status(500).json({
+        message: "Failed to fetch latest results",
+        error: "Unknown error",
+      });
+    }
   }
 });
 
@@ -68,12 +81,19 @@ app.get("/api/results/by-day", async (req, res) => {
     }
 
     const matches = await fetchMatchesForDate(date);
-    res.json(sortMatchesNewestFirst(matches));
-  } catch (error: any) {
-    res.status(500).json({
-      message: "Failed to fetch results by day",
-      error: error.response?.data || error.message,
-    });
+    res.json(matches);
+  } catch (error: unknown) {
+    if (error instanceof Error) {
+      res.status(500).json({
+        message: "Failed to fetch results by day",
+        error: error.message,
+      });
+    } else {
+      res.status(500).json({
+        message: "Failed to fetch results by day",
+        error: "Unknown error",
+      });
+    }
   }
 });
 
@@ -88,12 +108,19 @@ app.get("/api/results/by-player", async (req, res) => {
     }
 
     const matches = await fetchMatchesForPlayer(player);
-    res.json(sortMatchesNewestFirst(matches));
-  } catch (error: any) {
-    res.status(500).json({
-      message: "Failed to fetch results by player",
-      error: error.response?.data || error.message,
-    });
+    res.json(matches);
+  } catch (error: unknown) {
+    if (error instanceof Error) {
+      res.status(500).json({
+        message: "Failed to fetch results by player",
+        error: error.message,
+      });
+    } else {
+      res.status(500).json({
+        message: "Failed to fetch results by player",
+        error: "Unknown error",
+      });
+    }
   }
 });
 
@@ -104,11 +131,18 @@ app.get("/api/leaderboard/today", async (_req, res) => {
     const leaderboard = buildLeaderboard(matches);
 
     res.json(leaderboard);
-  } catch (error: any) {
-    res.status(500).json({
-      message: "Failed to build today's leaderboard",
-      error: error.response?.data || error.message,
-    });
+  } catch (error: unknown) {
+    if (error instanceof Error) {
+      res.status(500).json({
+        message: "Failed to build today's leaderboard",
+        error: error.message,
+      });
+    } else {
+      res.status(500).json({
+        message: "Failed to build today's leaderboard",
+        error: "Unknown error",
+      });
+    }
   }
 });
 
@@ -139,11 +173,97 @@ app.get("/api/leaderboard/range", async (req, res) => {
     const leaderboard = buildLeaderboard(matches);
 
     res.json(leaderboard);
-  } catch (error: any) {
-    res.status(500).json({
-      message: "Failed to build historical leaderboard",
-      error: error.response?.data || error.message,
+  } catch (error: unknown) {
+    if (error instanceof Error) {
+      res.status(500).json({
+        message: "Failed to build historical leaderboard",
+        error: error.message,
+      });
+    } else {
+      res.status(500).json({
+        message: "Failed to build historical leaderboard",
+        error: "Unknown error",
+      });
+    }
+  }
+});
+
+app.get("/api/debug/history-progress", async (req, res) => {
+  try {
+    const date = req.query.date as string | undefined;
+    const maxPages = req.query.maxPages
+      ? Number(req.query.maxPages)
+      : undefined;
+    const maxDurationMs = req.query.maxDurationMs
+      ? Number(req.query.maxDurationMs)
+      : undefined;
+    const startPath = req.query.startPath as string | undefined;
+
+    if (!date) {
+      return res.status(400).json({
+        message: "Query param 'date' is required",
+      });
+    }
+
+    if (!isValidDateString(date)) {
+      return res.status(400).json({
+        message: "Date must be in YYYY-MM-DD format",
+      });
+    }
+
+    const result = await fetchMatchesForDateDebug(date, {
+      maxPages,
+      maxDurationMs,
+      startPath,
     });
+
+    res.json(result);
+  } catch (error: unknown) {
+    if (error instanceof Error) {
+      res.status(500).json({
+        message: "Failed to debug historical paging",
+        error: error.message,
+      });
+    } else {
+      res.status(500).json({
+        message: "Failed to debug historical paging",
+        error: "Unknown error",
+      });
+    }
+  }
+});
+
+app.get("/api/debug/history-oldest", async (req, res) => {
+  try {
+    const maxPages = req.query.maxPages
+      ? Number(req.query.maxPages)
+      : undefined;
+    const maxDurationMs = req.query.maxDurationMs
+      ? Number(req.query.maxDurationMs)
+      : undefined;
+    const delayMs = req.query.delayMs
+      ? Number(req.query.delayMs)
+      : undefined;
+
+    const result = await inspectHistoryDepth({
+      maxPages,
+      maxDurationMs,
+      delayMs,
+    });
+
+    res.json(result);
+  } catch (error: unknown) {
+    if (error instanceof Error) {
+      res.status(500).json({
+        message: "Failed to inspect history depth",
+        error: error.message,
+      });
+    } else {
+      res.status(500).json({
+        message: "Failed to inspect history depth",
+        error: "Unknown error",
+      });
+    }
   }
 });
 

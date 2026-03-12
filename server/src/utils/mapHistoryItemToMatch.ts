@@ -1,8 +1,8 @@
-import { RawHistoryItem, Match } from "../types/history";
-import { getWinner } from "./getWinner";
+import type { RawHistoryItem, Match } from "../types/history";
+import { getMatchOutcome } from "./getMatchOutcome";
 
 export function mapHistoryItemToMatch(item: RawHistoryItem): Match {
-  const winner = getWinner(
+  const outcome = getMatchOutcome(
     item.playerA.name,
     item.playerA.played,
     item.playerB.name,
@@ -15,8 +15,9 @@ export function mapHistoryItemToMatch(item: RawHistoryItem): Match {
     playedAtMs: item.time,
     player1: item.playerA.name,
     player2: item.playerB.name,
-    player1Move: item.playerA.played,
-    player2Move: item.playerB.played,
-    winner,
+    player1Move: outcome.normalizedPlayer1Move ?? item.playerA.played,
+    player2Move: outcome.normalizedPlayer2Move ?? item.playerB.played,
+    winner: outcome.winner,
+    status: outcome.status,
   };
 }

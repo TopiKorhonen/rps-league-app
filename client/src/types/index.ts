@@ -1,4 +1,4 @@
-export type Move = "ROCK" | "PAPER" | "SCISSORS";
+export type MatchStatus = "WIN" | "TIE" | "INVALID";
 
 export interface Match {
   id: string;
@@ -6,9 +6,10 @@ export interface Match {
   playedAtMs: number;
   player1: string;
   player2: string;
-  player1Move: Move;
-  player2Move: Move;
+  player1Move: string;
+  player2Move: string;
   winner: string | null;
+  status: MatchStatus;
 }
 
 export interface LeaderboardEntry {

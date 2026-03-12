@@ -1,4 +1,4 @@
-import { Match } from "../types/history";
+import type { Match } from "../types/history";
 
 export interface LeaderboardEntry {
   player: string;
@@ -9,7 +9,7 @@ export function buildLeaderboard(matches: Match[]): LeaderboardEntry[] {
   const winCounts: Record<string, number> = {};
 
   for (const match of matches) {
-    if (!match.winner) {
+    if (match.status !== "WIN" || !match.winner) {
       continue;
     }
 

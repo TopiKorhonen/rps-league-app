@@ -1,3 +1,6 @@
+// Known cursor checkpoints used to reduce deep pagination
+// for historical date queries.
+
 export const historyCheckpoints: Record<string, string> = {
   "2026-03-12": "/history",
   "2026-03-11": "/history?cursor=suUmxRCV-vLO",

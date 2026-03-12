@@ -8,11 +8,10 @@ import {
   fetchMatchesForDate,
   fetchMatchesForPlayer,
   fetchMatchesForDateRange,
-  fetchMatchesForDateDebug,
-  inspectHistoryDepth,
 } from "./services/historyService";
 import { buildLeaderboard } from "./utils/buildLeaderboard";
 import { getStartPathForDate } from "./utils/getStartPathForDate";
+import { sortMatchesNewestFirst } from "./utils/sortMatchesNewestFirst";
 
 const app = express();
 
@@ -27,29 +26,10 @@ app.get("/api/health", (_req, res) => {
   res.json({ status: "ok" });
 });
 
-app.get("/api/test-history", async (_req, res) => {
-  try {
-    const result = await fetchHistoryPage();
-    res.json(result);
-  } catch (error: unknown) {
-    if (error instanceof Error) {
-      res.status(500).json({
-        message: "Failed to fetch history",
-        error: error.message,
-      });
-    } else {
-      res.status(500).json({
-        message: "Failed to fetch history",
-        error: "Unknown error",
-      });
-    }
-  }
-});
-
 app.get("/api/results/latest", async (_req, res) => {
   try {
     const result = await fetchHistoryPage("/history");
-    res.json(result.matches.sort((a, b) => b.playedAtMs - a.playedAtMs));
+    res.json(sortMatchesNewestFirst(result.matches));
   } catch (error: unknown) {
     if (error instanceof Error) {
       res.status(500).json({
@@ -187,81 +167,6 @@ app.get("/api/leaderboard/range", async (req, res) => {
     } else {
       res.status(500).json({
         message: "Failed to build historical leaderboard",
-        error: "Unknown error",
-      });
-    }
-  }
-});
-
-app.get("/api/debug/history-progress", async (req, res) => {
-  try {
-    const date = req.query.date as string | undefined;
-    const maxPages = req.query.maxPages
-      ? Number(req.query.maxPages)
-      : undefined;
-    const maxDurationMs = req.query.maxDurationMs
-      ? Number(req.query.maxDurationMs)
-      : undefined;
-    const startPath = req.query.startPath as string | undefined;
-
-    if (!date) {
-      return res.status(400).json({
-        message: "Query param 'date' is required",
-      });
-    }
-
-    if (!isValidDateString(date)) {
-      return res.status(400).json({
-        message: "Date must be in YYYY-MM-DD format",
-      });
-    }
-
-    const result = await fetchMatchesForDateDebug(date, {
-      maxPages,
-      maxDurationMs,
-      startPath,
-    });
-
-    res.json(result);
-  } catch (error: unknown) {
-    if (error instanceof Error) {
-      res.status(500).json({
-        message: "Failed to debug historical paging",
-        error: error.message,
-      });
-    } else {
-      res.status(500).json({
-        message: "Failed to debug historical paging",
-        error: "Unknown error",
-      });
-    }
-  }
-});
-
-app.get("/api/debug/history-oldest", async (req, res) => {
-  try {
-    const maxPages = req.query.maxPages
-      ? Number(req.query.maxPages)
-      : undefined;
-    const maxDurationMs = req.query.maxDurationMs
-      ? Number(req.query.maxDurationMs)
-      : undefined;
-
-    const result = await inspectHistoryDepth({
-      maxPages,
-      maxDurationMs,
-    });
-
-    res.json(result);
-  } catch (error: unknown) {
-    if (error instanceof Error) {
-      res.status(500).json({
-        message: "Failed to inspect history depth",
-        error: error.message,
-      });
-    } else {
-      res.status(500).json({
-        message: "Failed to inspect history depth",
         error: "Unknown error",
       });
     }

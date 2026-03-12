@@ -4,9 +4,49 @@ import { mapHistoryItemToMatch } from "../utils/mapHistoryItemToMatch";
 import { getMatchDate } from "../utils/getMatchDate";
 import { isValidMatchDate } from "../utils/isValidMatchDate";
 
-const dateQueryCache = new Map<string, Match[]>();
-
+// The legacy API is rate-limited, so requests are globally spaced out
+// and retried with backoff when a 429 response is returned.
 let lastLegacyApiRequestAt = 0;
+
+// Cache expensive historical queries for a short time to avoid
+// repeatedly crawling the cursor-based legacy API.
+type CacheEntry<T> = {
+  value: T;
+  expiresAt: number;
+};
+
+const dayCache = new Map<string, CacheEntry<Match[]>>();
+const rangeCache = new Map<string, CacheEntry<Match[]>>();
+
+function getCachedValue<T>(
+  cache: Map<string, CacheEntry<T>>,
+  key: string
+): T | null {
+  const entry = cache.get(key);
+
+  if (!entry) {
+    return null;
+  }
+
+  if (Date.now() > entry.expiresAt) {
+    cache.delete(key);
+    return null;
+  }
+
+  return entry.value;
+}
+
+function setCachedValue<T>(
+  cache: Map<string, CacheEntry<T>>,
+  key: string,
+  value: T,
+  ttlMs = 5 * 60 * 1000
+): void {
+  cache.set(key, {
+    value,
+    expiresAt: Date.now() + ttlMs,
+  });
+}
 
 async function waitForLegacyApiSlot(minIntervalMs = 350): Promise<void> {
   const now = Date.now();
@@ -77,15 +117,18 @@ export async function fetchHistoryPage(path = "/history"): Promise<{
   };
 }
 
+// Start historical queries from a known checkpoint when possible,
+// instead of always scanning from the newest page.
 export async function fetchMatchesForDate(
   targetDate: string,
   maxPages = 2000,
   startPath = "/history"
 ): Promise<Match[]> {
-  const cacheKey = `${targetDate}|${startPath}`;
+  const cacheKey = `day:${targetDate}`;
+  const cached = getCachedValue(dayCache, cacheKey);
 
-  const cached = dateQueryCache.get(cacheKey);
   if (cached) {
+    console.log(`Cache hit for ${cacheKey}`);
     return cached;
   }
 
@@ -122,7 +165,63 @@ export async function fetchMatchesForDate(
   }
 
   const result = collected.sort((a, b) => b.playedAtMs - a.playedAtMs);
-  dateQueryCache.set(cacheKey, result);
+
+  setCachedValue(dayCache, cacheKey, result);
+
+  return result;
+}
+
+export async function fetchMatchesForDateRange(
+  startDate: string,
+  endDate: string,
+  maxPages = 2000,
+  startPath = "/history"
+): Promise<Match[]> {
+  const cacheKey = `range:${startDate}:${endDate}`;
+  const cached = getCachedValue(rangeCache, cacheKey);
+
+  if (cached) {
+    console.log(`Cache hit for ${cacheKey}`);
+    return cached;
+  }
+
+  let path: string | null = startPath;
+  let pageCount = 0;
+  const collected: Match[] = [];
+
+  while (path && pageCount < maxPages) {
+    pageCount++;
+
+    const { matches, next } = await fetchHistoryPageWithRetry(path);
+
+    if (matches.length === 0) {
+      break;
+    }
+
+    const validDates = [...new Set(matches.map(getMatchDate))].sort();
+
+    for (const match of matches) {
+      const matchDate = getMatchDate(match);
+
+      if (matchDate >= startDate && matchDate <= endDate) {
+        collected.push(match);
+      }
+    }
+
+    if (validDates.length > 0) {
+      const newestValidDate = validDates[validDates.length - 1];
+
+      if (newestValidDate < startDate) {
+        break;
+      }
+    }
+
+    path = next;
+  }
+
+  const result = collected.sort((a, b) => b.playedAtMs - a.playedAtMs);
+
+  setCachedValue(rangeCache, cacheKey, result);
 
   return result;
 }
@@ -158,310 +257,4 @@ export async function fetchMatchesForPlayer(
   }
 
   return collected.sort((a, b) => b.playedAtMs - a.playedAtMs);
-}
-
-export async function fetchMatchesForDateRange(
-  startDate: string,
-  endDate: string,
-  maxPages = 2000,
-  startPath = "/history"
-): Promise<Match[]> {
-  let path: string | null = startPath;
-  let pageCount = 0;
-  const collected: Match[] = [];
-
-  while (path && pageCount < maxPages) {
-    pageCount++;
-
-    const { matches, next } = await fetchHistoryPageWithRetry(path);
-
-    if (matches.length === 0) {
-      break;
-    }
-
-    const validDates = [...new Set(matches.map(getMatchDate))].sort();
-
-    for (const match of matches) {
-      const matchDate = getMatchDate(match);
-
-      if (matchDate >= startDate && matchDate <= endDate) {
-        collected.push(match);
-      }
-    }
-
-    if (validDates.length > 0) {
-      const newestValidDate = validDates[validDates.length - 1];
-
-      if (newestValidDate < startDate) {
-        break;
-      }
-    }
-
-    path = next;
-  }
-
-  return collected.sort((a, b) => b.playedAtMs - a.playedAtMs);
-}
-
-export interface DateSearchPageMeta {
-  page: number;
-  path: string;
-  elapsedMs: number;
-  validMatchCount: number;
-  validDates: string[];
-  oldestValidDate: string | null;
-  newestValidDate: string | null;
-  targetHits: number;
-  next: string | null;
-}
-
-export interface DateSearchMeta {
-  targetDate: string;
-  pagesVisited: number;
-  totalMatchesCollected: number;
-  reachedTargetWindow: boolean;
-  reachedMaxPages: boolean;
-  reachedMaxDuration: boolean;
-  repeatedCursorDetected: boolean;
-  stopReason:
-    | "NO_MORE_CURSOR"
-    | "NO_MATCHES_ON_PAGE"
-    | "ALL_VALID_DATES_OLDER_THAN_TARGET"
-    | "MAX_PAGES_REACHED"
-    | "MAX_DURATION_REACHED"
-    | "REPEATED_CURSOR"
-    | "UNKNOWN";
-  totalElapsedMs: number;
-  pageSummaries: DateSearchPageMeta[];
-}
-
-export interface DateSearchResult {
-  matches: Match[];
-  meta: DateSearchMeta;
-}
-
-export async function fetchMatchesForDateDebug(
-  targetDate: string,
-  options?: {
-    maxPages?: number;
-    maxDurationMs?: number;
-    startPath?: string;
-  }
-): Promise<DateSearchResult> {
-  const maxPages = options?.maxPages ?? 2000;
-  const maxDurationMs = options?.maxDurationMs ?? 30000;
-
-  let path: string | null = options?.startPath ?? "/history";
-  let pageCount = 0;
-  const collected: Match[] = [];
-  const pageSummaries: DateSearchPageMeta[] = [];
-  const seenPaths = new Set<string>();
-  const startedAt = Date.now();
-
-  let reachedTargetWindow = false;
-  let reachedMaxPages = false;
-  let reachedMaxDuration = false;
-  let repeatedCursorDetected = false;
-
-  let stopReason: DateSearchMeta["stopReason"] = "UNKNOWN";
-
-  while (path) {
-    const totalElapsedMs = Date.now() - startedAt;
-
-    if (pageCount >= maxPages) {
-      reachedMaxPages = true;
-      stopReason = "MAX_PAGES_REACHED";
-      break;
-    }
-
-    if (totalElapsedMs >= maxDurationMs) {
-      reachedMaxDuration = true;
-      stopReason = "MAX_DURATION_REACHED";
-      break;
-    }
-
-    if (seenPaths.has(path)) {
-      repeatedCursorDetected = true;
-      stopReason = "REPEATED_CURSOR";
-      break;
-    }
-
-    seenPaths.add(path);
-    pageCount++;
-
-    const pageStartedAt = Date.now();
-    const { matches, next } = await fetchHistoryPageWithRetry(path);
-    const elapsedMs = Date.now() - pageStartedAt;
-
-    if (matches.length === 0) {
-      stopReason = "NO_MATCHES_ON_PAGE";
-      break;
-    }
-
-    const validDates = [...new Set(matches.map(getMatchDate))].sort();
-    const oldestValidDate = validDates.length > 0 ? validDates[0] : null;
-    const newestValidDate =
-      validDates.length > 0 ? validDates[validDates.length - 1] : null;
-
-    const targetMatches = matches.filter(
-      (match) => getMatchDate(match) === targetDate
-    );
-
-    if (targetMatches.length > 0) {
-      reachedTargetWindow = true;
-      collected.push(...targetMatches);
-    }
-
-    pageSummaries.push({
-      page: pageCount,
-      path,
-      elapsedMs,
-      validMatchCount: matches.length,
-      validDates,
-      oldestValidDate,
-      newestValidDate,
-      targetHits: targetMatches.length,
-      next,
-    });
-
-    if (newestValidDate && newestValidDate < targetDate) {
-      stopReason = "ALL_VALID_DATES_OLDER_THAN_TARGET";
-      break;
-    }
-
-    if (!next) {
-      stopReason = "NO_MORE_CURSOR";
-      break;
-    }
-
-    path = next;
-  }
-
-  const totalElapsedMs = Date.now() - startedAt;
-
-  return {
-    matches: collected.sort((a, b) => b.playedAtMs - a.playedAtMs),
-    meta: {
-      targetDate,
-      pagesVisited: pageCount,
-      totalMatchesCollected: collected.length,
-      reachedTargetWindow,
-      reachedMaxPages,
-      reachedMaxDuration,
-      repeatedCursorDetected,
-      stopReason,
-      totalElapsedMs,
-      pageSummaries,
-    },
-  };
-}
-
-export interface HistoryDepthMeta {
-  pagesVisited: number;
-  totalValidMatchesSeen: number;
-  oldestValidDateSeen: string | null;
-  newestValidDateSeen: string | null;
-  completed: boolean;
-  reachedMaxPages: boolean;
-  reachedMaxDuration: boolean;
-  repeatedCursorDetected: boolean;
-  stopReason:
-    | "NO_MORE_CURSOR"
-    | "NO_MATCHES_ON_PAGE"
-    | "MAX_PAGES_REACHED"
-    | "MAX_DURATION_REACHED"
-    | "REPEATED_CURSOR"
-    | "UNKNOWN";
-  totalElapsedMs: number;
-}
-
-export async function inspectHistoryDepth(options?: {
-  maxPages?: number;
-  maxDurationMs?: number;
-}): Promise<HistoryDepthMeta> {
-  const maxPages = options?.maxPages ?? 5000;
-  const maxDurationMs = options?.maxDurationMs ?? 120000;
-
-  let path: string | null = "/history";
-  let pageCount = 0;
-  let totalValidMatchesSeen = 0;
-  let oldestValidDateSeen: string | null = null;
-  let newestValidDateSeen: string | null = null;
-  let reachedMaxPages = false;
-  let reachedMaxDuration = false;
-  let repeatedCursorDetected = false;
-  let stopReason: HistoryDepthMeta["stopReason"] = "UNKNOWN";
-
-  const seenPaths = new Set<string>();
-  const startedAt = Date.now();
-
-  while (path) {
-    const elapsed = Date.now() - startedAt;
-
-    if (pageCount >= maxPages) {
-      reachedMaxPages = true;
-      stopReason = "MAX_PAGES_REACHED";
-      break;
-    }
-
-    if (elapsed >= maxDurationMs) {
-      reachedMaxDuration = true;
-      stopReason = "MAX_DURATION_REACHED";
-      break;
-    }
-
-    if (seenPaths.has(path)) {
-      repeatedCursorDetected = true;
-      stopReason = "REPEATED_CURSOR";
-      break;
-    }
-
-    seenPaths.add(path);
-    pageCount++;
-
-    const { matches, next } = await fetchHistoryPageWithRetry(path);
-
-    if (matches.length === 0) {
-      stopReason = "NO_MATCHES_ON_PAGE";
-      break;
-    }
-
-    totalValidMatchesSeen += matches.length;
-
-    const validDates = [...new Set(matches.map(getMatchDate))].sort();
-
-    if (validDates.length > 0) {
-      const pageOldest = validDates[0];
-      const pageNewest = validDates[validDates.length - 1];
-
-      if (!oldestValidDateSeen || pageOldest < oldestValidDateSeen) {
-        oldestValidDateSeen = pageOldest;
-      }
-
-      if (!newestValidDateSeen || pageNewest > newestValidDateSeen) {
-        newestValidDateSeen = pageNewest;
-      }
-    }
-
-    if (!next) {
-      stopReason = "NO_MORE_CURSOR";
-      path = null;
-      break;
-    }
-
-    path = next;
-  }
-
-  return {
-    pagesVisited: pageCount,
-    totalValidMatchesSeen,
-    oldestValidDateSeen,
-    newestValidDateSeen,
-    completed: stopReason === "NO_MORE_CURSOR",
-    reachedMaxPages,
-    reachedMaxDuration,
-    repeatedCursorDetected,
-    stopReason,
-    totalElapsedMs: Date.now() - startedAt,
-  };
 }

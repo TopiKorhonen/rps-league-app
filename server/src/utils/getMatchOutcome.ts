@@ -1,3 +1,7 @@
+// Normalize legacy API move values and determine match status.
+// Valid move beats invalid move, equal valid moves are ties,
+// and two invalid moves produce an INVALID result.
+
 import type { MatchStatus, ValidMove } from "../types/history";
 import { normalizeMove } from "./normalizeMove";
 

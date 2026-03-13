@@ -12,6 +12,8 @@ type CacheEntry<T> = {
   expiresAt: number;
 };
 
+const playerCache = new Map<string, CacheEntry<Match[]>>();
+
 type HistoryPageResult = {
   matches: Match[];
   next: string | null;
@@ -288,4 +290,77 @@ export async function fetchMatchesForPlayer(
   }
 
   return collected.sort((a, b) => b.playedAtMs - a.playedAtMs);
+}
+
+export async function fetchMatchesForPlayerFiltered(
+  playerQuery: string,
+  options?: {
+    startDate?: string;
+    endDate?: string;
+    maxPages?: number;
+    startPath?: string;
+  }
+): Promise<Match[]> {
+  const search = playerQuery.trim().toLowerCase();
+  const startDate = options?.startDate;
+  const endDate = options?.endDate;
+  const maxPages = options?.maxPages ?? 200;
+  const cacheKey = `player:${playerQuery.trim().toLowerCase()}:${startDate ?? ""}:${endDate ?? ""}`;
+  const cached = getCachedValue(playerCache, cacheKey);
+  
+  if (cached) {
+    return cached;
+  }
+  
+  let path: string | null = options?.startPath ?? "/history";
+  let pageCount = 0;
+  const collected: Match[] = [];
+
+  while (path && pageCount < maxPages) {
+    pageCount++;
+
+    const currentPath = path;
+    const { matches, next } = await fetchHistoryPageWithRetry(currentPath);
+
+    if (matches.length === 0) {
+      break;
+    }
+
+    registerDatesFromPage(currentPath, matches);
+
+    let newestValidDate: string | null = null;
+
+    for (const match of matches) {
+      const matchDate = getMatchDate(match);
+
+      if (!newestValidDate || matchDate > newestValidDate) {
+        newestValidDate = matchDate;
+      }
+
+      if (startDate && matchDate < startDate) {
+        continue;
+      }
+
+      if (endDate && matchDate > endDate) {
+        continue;
+      }
+
+      const player1 = match.player1.toLowerCase();
+      const player2 = match.player2.toLowerCase();
+
+      if (player1.includes(search) || player2.includes(search)) {
+        collected.push(match);
+      }
+    }
+
+    if (startDate && newestValidDate && newestValidDate < startDate) {
+      break;
+    }
+
+    path = next;
+  }
+
+  const result = collected.sort((a, b) => b.playedAtMs - a.playedAtMs);
+  setCachedValue(playerCache, cacheKey, result);
+  return result;
 }

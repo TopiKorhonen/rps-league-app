@@ -258,6 +258,11 @@ p {
   color: #166534;
 }
 
+.badge-loss {
+  background: #fee2e2;
+  color: #c2410c;
+}
+
 .badge-tie {
   background: #dbeafe;
   color: #1d4ed8;

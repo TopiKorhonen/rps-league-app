@@ -7,7 +7,7 @@ import axios from "axios";
 import {
   fetchHistoryPage,
   fetchMatchesForDate,
-  fetchMatchesForPlayer,
+  fetchMatchesForPlayerFiltered,
   fetchMatchesForDateRange,
 } from "./services/historyService";
 import { buildLeaderboard } from "./utils/buildLeaderboard";
@@ -85,6 +85,8 @@ app.get("/api/results/by-day", async (req, res) => {
 app.get("/api/results/by-player", async (req, res) => {
   try {
     const player = req.query.player as string | undefined;
+    const start = req.query.start as string | undefined;
+    const end = req.query.end as string | undefined;
 
     if (!player) {
       return res.status(400).json({
@@ -92,7 +94,33 @@ app.get("/api/results/by-player", async (req, res) => {
       });
     }
 
-    const matches = await fetchMatchesForPlayer(player);
+    if (start && !isValidDateString(start)) {
+      return res.status(400).json({
+        message: "Start date must be in YYYY-MM-DD format",
+      });
+    }
+
+    if (end && !isValidDateString(end)) {
+      return res.status(400).json({
+        message: "End date must be in YYYY-MM-DD format",
+      });
+    }
+
+    if (start && end && start > end) {
+      return res.status(400).json({
+        message: "'start' date must be before or equal to 'end' date",
+      });
+    }
+
+    const startPath = start ? getStartPathForDate(start) : "/history";
+
+    const matches = await fetchMatchesForPlayerFiltered(player, {
+      startDate: start,
+      endDate: end,
+      maxPages: start ? 2000 : 200,
+      startPath,
+    });
+
     res.json(matches);
   } catch (error: unknown) {
     if (error instanceof Error) {

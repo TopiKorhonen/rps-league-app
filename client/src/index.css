@@ -166,3 +166,19 @@ p {
   background: #fee2e2;
   color: #991b1b;
 }
+
+.live-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  margin-right: 8px;
+}
+
+.live-dot-connected {
+  background: #22c55e;
+}
+
+.live-dot-disconnected {
+  background: #ef4444;
+}

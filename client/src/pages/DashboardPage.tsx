@@ -26,7 +26,7 @@ function DashboardPage() {
           fetchTodayLeaderboard(),
         ]);
 
-        setLatestMatches(matchesData);
+        setLatestMatches(matchesData.slice(0, 30));
         setLeaderboard(leaderboardData);
       } catch (err: unknown) {
         if (err instanceof Error) {
@@ -50,7 +50,6 @@ function DashboardPage() {
         window.clearTimeout(reconnectTimerRef.current);
         reconnectTimerRef.current = null;
       }
-
       setLiveStatus("connected");
     };
 
@@ -65,10 +64,10 @@ function DashboardPage() {
 
           return [incomingMatch, ...withoutDuplicate]
             .sort((a, b) => b.playedAtMs - a.playedAtMs)
-            .slice(0, 20);
+            .slice(0, 30);
         });
       } catch {
-        // Ignore malformed live events
+        // ignore malformed events
       }
     };
 
@@ -85,42 +84,79 @@ function DashboardPage() {
       if (reconnectTimerRef.current !== null) {
         window.clearTimeout(reconnectTimerRef.current);
       }
-
       eventSource.close();
     };
   }, []);
 
   return (
-    <div className="page-grid">
-      <section className="page-card page-section">
-        <div>
-          <h2>Latest Match Results</h2>
-          <p className="muted-text">Times are shown in UTC.</p>
-          <p className="muted-text">
-            Live updates:{" "}
-            {liveStatus === "connected"
-              ? "Connected"
-              : liveStatus === "reconnecting"
-              ? "Reconnecting"
-              : "Connecting"}
+    <div className="dashboard-layout">
+      <section className="live-banner">
+        <div className="live-banner-left">
+          <h2>Live feed</h2>
+        </div>
+
+        <div className="live-banner-center">
+          <p>
+            If live updates are available, current live match results will appear here
+            and update automatically.
           </p>
         </div>
 
-        {loading && <div className="status-message">Loading dashboard...</div>}
-        {error && <div className="status-message">Error: {error}</div>}
-        {!loading && !error && <MatchTable matches={latestMatches} />}
-      </section>
-
-      <section className="page-card page-section">
-        <div>
-          <h2>Today's Leaderboard</h2>
-          <p className="muted-text">Ranked by number of wins today.</p>
+        <div className="live-banner-right">
+          <div className="live-pill">
+            <span
+              className={`live-dot ${
+                liveStatus === "connected"
+                  ? "live-dot-connected"
+                  : liveStatus === "reconnecting"
+                  ? "live-dot-reconnecting"
+                  : "live-dot-connecting"
+              }`}
+            />
+            {liveStatus === "connected"
+              ? "Live connected"
+              : liveStatus === "reconnecting"
+              ? "Live reconnecting"
+              : "Live connecting"}
+          </div>
         </div>
-
-        {loading && <div className="status-message">Loading leaderboard...</div>}
-        {error && <div className="status-message">Error: {error}</div>}
-        {!loading && !error && <LeaderboardTable entries={leaderboard} />}
       </section>
+
+      {error && <div className="status-message">Error: {error}</div>}
+
+      <div className="dashboard-panels">
+        <section className="page-card page-section dashboard-card">
+          <div>
+            <h2>Latest match results</h2>
+            <p className="muted-text">
+              Newest results first. Times are shown in UTC.
+            </p>
+          </div>
+
+          {loading ? (
+            <div className="status-message">Loading latest results...</div>
+          ) : (
+            <div className="scroll-panel tall-scroll-panel">
+              <MatchTable matches={latestMatches} />
+            </div>
+          )}
+        </section>
+
+        <section className="page-card page-section dashboard-card">
+          <div>
+            <h2>Today's leaderboard</h2>
+            <p className="muted-text">Ranked by number of wins today.</p>
+          </div>
+
+          {loading ? (
+            <div className="status-message">Loading leaderboard...</div>
+          ) : (
+            <div className="scroll-panel tall-scroll-panel">
+              <LeaderboardTable entries={leaderboard} />
+            </div>
+          )}
+        </section>
+      </div>
     </div>
   );
 }

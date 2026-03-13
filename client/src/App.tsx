@@ -9,11 +9,15 @@ function App() {
 
   return (
     <div className="page-shell">
-      <header>
-        <h1>RPS League</h1>
-        <p className="muted-text">
-          Match results and leaderboards powered by the legacy RPS API.
-        </p>
+      <header className="app-header">
+        <div className="app-header-top">
+          <div className="app-title-block">
+            <h1 className="app-title">RPS League</h1>
+            <p className="app-subtitle">
+              Live results, player history, and leaderboard standings.
+            </p>
+          </div>
+        </div>
 
         <nav className="top-nav">
           <NavLink to="/" label="Dashboard" currentPath={location.pathname} />
@@ -58,8 +62,9 @@ function NavLink({ to, label, currentPath }: NavLinkProps) {
     <Link
       to={to}
       style={{
-        fontWeight: isActive ? 700 : 500,
-        borderColor: isActive ? "#9ca3af" : undefined,
+        fontWeight: isActive ? 800 : 500,
+        background: isActive ? "#ffffff" : undefined,
+        borderColor: isActive ? "#475569" : undefined,
       }}
     >
       {label}

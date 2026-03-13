@@ -37,35 +37,38 @@ function ResultsByPlayerPage() {
   }
 
   return (
-    <div>
-      <h2>Results by Player</h2>
+    <div className="page-card page-section">
+      <div>
+        <h2>Results by Player</h2>
+        <p className="muted-text">
+          Search for a full or partial player name.
+        </p>
+      </div>
 
-      <form
-        onSubmit={handleSubmit}
-        style={{
-          display: "flex",
-          gap: "12px",
-          alignItems: "center",
-          marginBottom: "20px",
-        }}
-      >
-        <input
-          type="text"
-          placeholder="Enter player name"
-          value={player}
-          onChange={(event) => setPlayer(event.target.value)}
-        />
+      <form onSubmit={handleSubmit} className="form-row">
+        <div className="form-field">
+          <label htmlFor="player">Player name</label>
+          <input
+            id="player"
+            type="text"
+            placeholder="e.g. Elena"
+            value={player}
+            onChange={(event) => setPlayer(event.target.value)}
+          />
+        </div>
 
         <button type="submit">Search</button>
       </form>
 
-      {!hasSearched && <p>Enter a player name to view matches.</p>}
-      {loading && <p>Loading results...</p>}
-      {error && <p>Error: {error}</p>}
-
-      {!loading && !error && hasSearched && (
-        <MatchTable matches={matches} />
+      {!hasSearched && (
+        <div className="status-message">
+          Enter a player name to view match results.
+        </div>
       )}
+
+      {loading && <div className="status-message">Loading results...</div>}
+      {error && <div className="status-message">Error: {error}</div>}
+      {!loading && !error && hasSearched && <MatchTable matches={matches} />}
     </div>
   );
 }

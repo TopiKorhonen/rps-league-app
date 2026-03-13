@@ -3,20 +3,31 @@ import type { RawHistoryItem, Match } from "../types/history";
 import { mapHistoryItemToMatch } from "../utils/mapHistoryItemToMatch";
 import { getMatchDate } from "../utils/getMatchDate";
 import { isValidMatchDate } from "../utils/isValidMatchDate";
+import { registerCheckpoint } from "../utils/getStartPathForDate";
 
-// The legacy API is rate-limited, so requests are globally spaced out
-// and retried with backoff when a 429 response is returned.
-let lastLegacyApiRequestAt = 0;
-
-// Cache expensive historical queries for a short time to avoid
-// repeatedly crawling the cursor-based legacy API.
+// Cache expensive historical query results for a short time so repeated
+// requests do not re-scan the cursor-based legacy API.
 type CacheEntry<T> = {
   value: T;
   expiresAt: number;
 };
 
+type HistoryPageResult = {
+  matches: Match[];
+  next: string | null;
+};
+
 const dayCache = new Map<string, CacheEntry<Match[]>>();
 const rangeCache = new Map<string, CacheEntry<Match[]>>();
+const pageCache = new Map<string, CacheEntry<HistoryPageResult>>();
+
+// The legacy API is rate-limited, so requests are globally spaced out.
+let lastLegacyApiRequestAt = 0;
+
+interface HistoryResponse {
+  data: RawHistoryItem[];
+  cursor?: string | null;
+}
 
 function getCachedValue<T>(
   cache: Map<string, CacheEntry<T>>,
@@ -48,6 +59,10 @@ function setCachedValue<T>(
   });
 }
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 async function waitForLegacyApiSlot(minIntervalMs = 350): Promise<void> {
   const now = Date.now();
   const waitMs = Math.max(0, lastLegacyApiRequestAt + minIntervalMs - now);
@@ -57,45 +72,6 @@ async function waitForLegacyApiSlot(minIntervalMs = 350): Promise<void> {
   }
 
   lastLegacyApiRequestAt = Date.now();
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-interface HistoryResponse {
-  data: RawHistoryItem[];
-  cursor?: string | null;
-}
-
-async function fetchHistoryPageWithRetry(
-  path: string,
-  maxRetries = 5
-): Promise<{ matches: Match[]; next: string | null }> {
-  let attempt = 0;
-
-  while (true) {
-    try {
-      await waitForLegacyApiSlot(350);
-      return await fetchHistoryPage(path);
-    } catch (error: any) {
-      const status = error?.response?.status;
-
-      if (status === 429 && attempt < maxRetries) {
-        const delayMs = 1500 * Math.pow(2, attempt);
-
-        console.warn(
-          `429 from legacy API for ${path}. Retry ${attempt + 1} in ${delayMs}ms`
-        );
-
-        await sleep(delayMs);
-        attempt++;
-        continue;
-      }
-
-      throw error;
-    }
-  }
 }
 
 export async function fetchHistoryPage(path = "/history"): Promise<{
@@ -117,8 +93,56 @@ export async function fetchHistoryPage(path = "/history"): Promise<{
   };
 }
 
-// Start historical queries from a known checkpoint when possible,
-// instead of always scanning from the newest page.
+async function fetchHistoryPageWithRetry(
+  path: string,
+  maxRetries = 6
+): Promise<{ matches: Match[]; next: string | null }> {
+  const cacheKey = `page:${path}`;
+  const cached = getCachedValue(pageCache, cacheKey);
+
+  if (cached) {
+    return cached;
+  }
+
+  let attempt = 0;
+
+  while (true) {
+    try {
+      await waitForLegacyApiSlot(500);
+      const result = await fetchHistoryPage(path);
+
+      // Cache raw cursor-page results because many historical queries overlap.
+      setCachedValue(pageCache, cacheKey, result, 10 * 60 * 1000);
+
+      return result;
+    } catch (error: any) {
+      const status = error?.response?.status;
+
+      if (status === 429 && attempt < maxRetries) {
+        const delayMs = 1500 * Math.pow(2, attempt);
+
+        console.warn(
+          `429 from legacy API for ${path}. Retry ${attempt + 1} in ${delayMs}ms`
+        );
+
+        await sleep(delayMs);
+        attempt++;
+        continue;
+      }
+
+      throw error;
+    }
+  }
+}
+
+function registerDatesFromPage(path: string, matches: Match[]): void {
+  const pageDates = new Set(matches.map(getMatchDate));
+
+  for (const date of pageDates) {
+    registerCheckpoint(date, path);
+  }
+}
+
 export async function fetchMatchesForDate(
   targetDate: string,
   maxPages = 2000,
@@ -128,7 +152,6 @@ export async function fetchMatchesForDate(
   const cached = getCachedValue(dayCache, cacheKey);
 
   if (cached) {
-    console.log(`Cache hit for ${cacheKey}`);
     return cached;
   }
 
@@ -139,33 +162,37 @@ export async function fetchMatchesForDate(
   while (path && pageCount < maxPages) {
     pageCount++;
 
-    const { matches, next } = await fetchHistoryPageWithRetry(path);
+    const currentPath = path;
+    const { matches, next } = await fetchHistoryPageWithRetry(currentPath);
 
     if (matches.length === 0) {
       break;
     }
 
-    const validDates = [...new Set(matches.map(getMatchDate))].sort();
+    registerDatesFromPage(currentPath, matches);
+
+    let newestValidDate: string | null = null;
 
     for (const match of matches) {
-      if (getMatchDate(match) === targetDate) {
+      const matchDate = getMatchDate(match);
+
+      if (!newestValidDate || matchDate > newestValidDate) {
+        newestValidDate = matchDate;
+      }
+
+      if (matchDate === targetDate) {
         collected.push(match);
       }
     }
 
-    if (validDates.length > 0) {
-      const newestValidDate = validDates[validDates.length - 1];
-
-      if (newestValidDate < targetDate) {
-        break;
-      }
+    if (newestValidDate && newestValidDate < targetDate) {
+      break;
     }
 
     path = next;
   }
 
   const result = collected.sort((a, b) => b.playedAtMs - a.playedAtMs);
-
   setCachedValue(dayCache, cacheKey, result);
 
   return result;
@@ -181,7 +208,6 @@ export async function fetchMatchesForDateRange(
   const cached = getCachedValue(rangeCache, cacheKey);
 
   if (cached) {
-    console.log(`Cache hit for ${cacheKey}`);
     return cached;
   }
 
@@ -192,35 +218,37 @@ export async function fetchMatchesForDateRange(
   while (path && pageCount < maxPages) {
     pageCount++;
 
-    const { matches, next } = await fetchHistoryPageWithRetry(path);
+    const currentPath = path;
+    const { matches, next } = await fetchHistoryPageWithRetry(currentPath);
 
     if (matches.length === 0) {
       break;
     }
 
-    const validDates = [...new Set(matches.map(getMatchDate))].sort();
+    registerDatesFromPage(currentPath, matches);
+
+    let newestValidDate: string | null = null;
 
     for (const match of matches) {
       const matchDate = getMatchDate(match);
+
+      if (!newestValidDate || matchDate > newestValidDate) {
+        newestValidDate = matchDate;
+      }
 
       if (matchDate >= startDate && matchDate <= endDate) {
         collected.push(match);
       }
     }
 
-    if (validDates.length > 0) {
-      const newestValidDate = validDates[validDates.length - 1];
-
-      if (newestValidDate < startDate) {
-        break;
-      }
+    if (newestValidDate && newestValidDate < startDate) {
+      break;
     }
 
     path = next;
   }
 
   const result = collected.sort((a, b) => b.playedAtMs - a.playedAtMs);
-
   setCachedValue(rangeCache, cacheKey, result);
 
   return result;
@@ -238,11 +266,14 @@ export async function fetchMatchesForPlayer(
   while (path && pageCount < maxPages) {
     pageCount++;
 
-    const { matches, next } = await fetchHistoryPageWithRetry(path);
+    const currentPath = path;
+    const { matches, next } = await fetchHistoryPageWithRetry(currentPath);
 
     if (matches.length === 0) {
       break;
     }
+
+    registerDatesFromPage(currentPath, matches);
 
     for (const match of matches) {
       const player1 = match.player1.toLowerCase();

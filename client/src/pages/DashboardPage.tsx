@@ -23,13 +23,13 @@ function DashboardPage() {
 
         setLatestMatches(matchesData);
         setLeaderboard(leaderboardData);
-      } catch (err: unknown){
+      } catch (err: unknown) {
         if (err instanceof Error) {
           setError(err.message);
         } else {
-          setError("Failed to load dashboard data");
+          setError("Failed to load dashboard");
         }
-      }finally {
+      } finally {
         setLoading(false);
       }
     }
@@ -37,24 +37,28 @@ function DashboardPage() {
     loadDashboard();
   }, []);
 
-  if (loading) {
-    return <p>Loading dashboard...</p>;
-  }
-
-  if (error) {
-    return <p>Error: {error}</p>;
-  }
-
   return (
-    <div style={{ display: "grid", gap: "32px" }}>
-      <section>
-        <h2>Latest Match Results</h2>
-        <MatchTable matches={latestMatches} />
+    <div className="page-grid">
+      <section className="page-card page-section">
+        <div>
+          <h2>Latest Match Results</h2>
+          <p className="muted-text">Times are shown in UTC.</p>
+        </div>
+
+        {loading && <div className="status-message">Loading dashboard...</div>}
+        {error && <div className="status-message">Error: {error}</div>}
+        {!loading && !error && <MatchTable matches={latestMatches} />}
       </section>
 
-      <section>
-        <h2>Today's Leaderboard</h2>
-        <LeaderboardTable entries={leaderboard} />
+      <section className="page-card page-section">
+        <div>
+          <h2>Today's Leaderboard</h2>
+          <p className="muted-text">Ranked by number of wins today.</p>
+        </div>
+
+        {loading && <div className="status-message">Loading leaderboard...</div>}
+        {error && <div className="status-message">Error: {error}</div>}
+        {!loading && !error && <LeaderboardTable entries={leaderboard} />}
       </section>
     </div>
   );

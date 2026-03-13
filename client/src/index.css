@@ -1,0 +1,168 @@
+:root {
+  font-family: Inter, Arial, sans-serif;
+  color: #111827;
+  background: #f3f4f6;
+  line-height: 1.5;
+  font-weight: 400;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: #f3f4f6;
+  color: #111827;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+button,
+input {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+  border: 1px solid #d1d5db;
+  background: white;
+  border-radius: 8px;
+  padding: 0.6rem 1rem;
+}
+
+button:hover {
+  background: #f9fafb;
+}
+
+input {
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  padding: 0.6rem 0.75rem;
+  background: white;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  background: white;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+th,
+td {
+  text-align: left;
+  padding: 0.85rem 1rem;
+  border-bottom: 1px solid #e5e7eb;
+  vertical-align: top;
+}
+
+th {
+  background: #f9fafb;
+  font-weight: 600;
+}
+
+tr:last-child td {
+  border-bottom: none;
+}
+
+h1,
+h2,
+h3 {
+  margin-top: 0;
+}
+
+p {
+  margin-top: 0;
+}
+
+.page-shell {
+  max-width: 1150px;
+  margin: 0 auto;
+  padding: 32px 20px 48px;
+}
+
+.page-card {
+  background: white;
+  border-radius: 16px;
+  padding: 20px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.06);
+}
+
+.page-section {
+  display: grid;
+  gap: 16px;
+}
+
+.page-grid {
+  display: grid;
+  gap: 24px;
+}
+
+.top-nav {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin: 20px 0 28px;
+}
+
+.top-nav a {
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 999px;
+  padding: 0.55rem 0.95rem;
+}
+
+.form-row {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  align-items: end;
+}
+
+.form-field {
+  display: grid;
+  gap: 6px;
+}
+
+.muted-text {
+  color: #6b7280;
+}
+
+.status-message {
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+}
+
+.badge {
+  display: inline-block;
+  border-radius: 999px;
+  padding: 0.25rem 0.65rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.badge-win {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.badge-tie {
+  background: #e0e7ff;
+  color: #3730a3;
+}
+
+.badge-invalid {
+  background: #fee2e2;
+  color: #991b1b;
+}

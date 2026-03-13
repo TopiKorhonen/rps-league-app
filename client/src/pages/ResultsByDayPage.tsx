@@ -27,7 +27,7 @@ function ResultsByDayPage() {
       setMatches(data);
     } catch (err: unknown) {
       if (err instanceof Error) {
-        setError(err.message || "Failed to fetch results");
+        setError(err.message);
       } else {
         setError("Failed to fetch results");
       }
@@ -37,29 +37,34 @@ function ResultsByDayPage() {
   }
 
   return (
-    <div>
-      <h2>Results by Day</h2>
+    <div className="page-card page-section">
+      <div>
+        <h2>Results by Day</h2>
+        <p className="muted-text">Date filtering and times use UTC.</p>
+      </div>
 
-      <form
-        onSubmit={handleSubmit}
-        style={{
-          display: "flex",
-          gap: "12px",
-          alignItems: "center",
-          marginBottom: "20px",
-        }}
-      >
-        <input
-          type="date"
-          value={date}
-          onChange={(event) => setDate(event.target.value)}
-        />
+      <form onSubmit={handleSubmit} className="form-row">
+        <div className="form-field">
+          <label htmlFor="day">Date</label>
+          <input
+            id="day"
+            type="date"
+            value={date}
+            onChange={(event) => setDate(event.target.value)}
+          />
+        </div>
+
         <button type="submit">Search</button>
       </form>
 
-      {!hasSearched && <p>Select a date to view match results.</p>}
-      {loading && <p>Loading results...</p>}
-      {error && <p>Error: {error}</p>}
+      {!hasSearched && (
+        <div className="status-message">
+          Select a date to view match results.
+        </div>
+      )}
+
+      {loading && <div className="status-message">Loading results...</div>}
+      {error && <div className="status-message">Error: {error}</div>}
       {!loading && !error && hasSearched && <MatchTable matches={matches} />}
     </div>
   );

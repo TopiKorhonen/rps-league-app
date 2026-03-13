@@ -43,54 +43,53 @@ function LeaderboardPage() {
   }
 
   return (
-    <div>
-      <h2>Historical Leaderboard</h2>
-      <p style={{ marginBottom: "12px" }}>
-        Date range filtering is based on UTC dates.
-      </p>
+    <div className="page-card page-section">
+      <div>
+        <h2>Historical Leaderboard</h2>
+        <p className="muted-text">Date range filtering uses UTC dates.</p>
+      </div>
 
-      <form
-        onSubmit={handleSubmit}
-        style={{
-          display: "flex",
-          gap: "12px",
-          alignItems: "center",
-          flexWrap: "wrap",
-          marginBottom: "20px",
-        }}
-      >
-        <label>
-          Start date{" "}
+      <form onSubmit={handleSubmit} className="form-row">
+        <div className="form-field">
+          <label htmlFor="startDate">Start date</label>
           <input
+            id="startDate"
             type="date"
             value={startDate}
             onChange={(event) => setStartDate(event.target.value)}
           />
-        </label>
+        </div>
 
-        <label>
-          End date{" "}
+        <div className="form-field">
+          <label htmlFor="endDate">End date</label>
           <input
+            id="endDate"
             type="date"
             value={endDate}
             onChange={(event) => setEndDate(event.target.value)}
           />
-        </label>
+        </div>
 
         <button type="submit">Search</button>
       </form>
 
-      {!hasSearched && <p>Select a date range to view leaderboard results.</p>}
-      {loading && <p>Loading leaderboard...</p>}
-      {error && <p>Error: {error}</p>}
+      {!hasSearched && (
+        <div className="status-message">
+          Select a date range to view leaderboard results.
+        </div>
+      )}
+
+      {loading && <div className="status-message">Loading leaderboard...</div>}
+      {error && <div className="status-message">Error: {error}</div>}
+
       {!loading && !error && hasSearched && (
         <>
-            <p>
-            Showing leaderboard for {startDate} to {endDate} (UTC)
-            </p>
-            <LeaderboardTable entries={entries} />
+          <div className="muted-text">
+            Showing leaderboard for {startDate} to {endDate}.
+          </div>
+          <LeaderboardTable entries={entries} />
         </>
-        )}
+      )}
     </div>
   );
 }

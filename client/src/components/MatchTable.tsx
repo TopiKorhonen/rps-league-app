@@ -6,30 +6,32 @@ interface MatchTableProps {
 
 function MatchTable({ matches }: MatchTableProps) {
   if (matches.length === 0) {
-    return <p>No matches found.</p>;
+    return <div className="status-message">No matches found.</div>;
   }
 
   return (
-    <table style={{ width: "100%", borderCollapse: "collapse", marginTop: "12px" }}>
+    <table>
       <thead>
         <tr>
-          <th style={thStyle}>Time</th>
-          <th style={thStyle}>Player 1</th>
-          <th style={thStyle}>Move</th>
-          <th style={thStyle}>Player 2</th>
-          <th style={thStyle}>Move</th>
-          <th style={thStyle}>Winner</th>
+          <th>Time (UTC)</th>
+          <th>Player 1</th>
+          <th>Move</th>
+          <th>Player 2</th>
+          <th>Move</th>
+          <th>Result</th>
         </tr>
       </thead>
       <tbody>
         {matches.map((match) => (
           <tr key={match.id}>
-            <td style={tdStyle}>{formatUtcDateTime(match.playedAt)}</td>
-            <td style={tdStyle}>{match.player1}</td>
-            <td style={tdStyle}>{match.player1Move}</td>
-            <td style={tdStyle}>{match.player2}</td>
-            <td style={tdStyle}>{match.player2Move}</td>
-            <td style={tdStyle}>{match.winner ?? "Draw"}</td>
+            <td>{formatUtcDateTime(match.playedAt)}</td>
+            <td>{match.player1}</td>
+            <td>{match.player1Move}</td>
+            <td>{match.player2}</td>
+            <td>{match.player2Move}</td>
+            <td>
+              <ResultCell match={match} />
+            </td>
           </tr>
         ))}
       </tbody>
@@ -37,16 +39,22 @@ function MatchTable({ matches }: MatchTableProps) {
   );
 }
 
-const thStyle: React.CSSProperties = {
-  borderBottom: "1px solid #ccc",
-  textAlign: "left",
-  padding: "8px",
-};
+function ResultCell({ match }: { match: Match }) {
+  if (match.status === "TIE") {
+    return <span className="badge badge-tie">Tie</span>;
+  }
 
-const tdStyle: React.CSSProperties = {
-  borderBottom: "1px solid #eee",
-  padding: "8px",
-};
+  if (match.status === "INVALID") {
+    return <span className="badge badge-invalid">Invalid</span>;
+  }
+
+  return (
+    <div style={{ display: "grid", gap: 4 }}>
+      <span className="badge badge-win">Win</span>
+      <span>{match.winner}</span>
+    </div>
+  );
+}
 
 function formatUtcDateTime(value: string): string {
   return new Intl.DateTimeFormat("en-GB", {

@@ -190,7 +190,7 @@ Expensive historical results are cached in memory for a short time, including:
 
 - player-filtered results
 
-####5. Cursor page caching
+#### 5. Cursor page caching
 
 Raw history pages are cached by cursor path, so overlapping historical traversals can reuse previously fetched pages instead of re-requesting the same upstream data.
 
